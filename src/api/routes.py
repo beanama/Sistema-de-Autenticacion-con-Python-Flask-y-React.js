@@ -1,7 +1,7 @@
 """
 This module takes care of starting the API Server, Loading the DB and Adding the endpoints
 """
-from flask import Flask, request, jsonify, url_for, Blueprint
+from flask import Flask, request, jsonify, url_for, Blueprint, render_template, render_template_string, redirect, abort
 from api.models import db, User
 from api.utils import generate_sitemap, APIException
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -34,8 +34,12 @@ def user_signup():
     db.session.add(user)
     db.session.commit()
 
+    token = create_access_token(identity=user.id)
+
     response_body = {
+        "msg": "User succesfully created.",
         "user": user.serialize(),
+        "token": token
     }
 
     return jsonify(response_body), 201
@@ -60,14 +64,22 @@ def login():
     email = request.json.get("email")
     password = request.json.get("password")
 
-    access_token = create_access_token(identity=email)
+    user = User.query.filter_by(email=email).first()
 
-    response_body = {
-        "access_token": access_token,
-    }
+    validated_password = user.check_password(
+        password)
 
-    return jsonify(response_body), 201
+    if user is None:
+        return abort(404, message='User does not exist')
 
+    if not validated_password:
+        return abort(404, message='Something went wrong')
+
+    token = create_access_token(identity=user.id)
+    return jsonify({"token": token, "user_id": user.id}), 200
+
+
+# PRIVATE VIEWS ROUTES ------------------------------------------------------------------------------------------------------PRIVATE VIEWS ROUTES #
 
 @api.route("/dashboard", methods=["GET"])
 @jwt_required()
@@ -77,4 +89,6 @@ def dashboard():
     user = User.filter.get(current_user_id)
 
     return jsonify({"id": user.id, "email": user.email }), 200
+
+
 
